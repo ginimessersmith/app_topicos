@@ -39,7 +39,7 @@ class ShakeService : Service(), SensorEventListener,TextToSpeech.OnInitListener 
         handler.postDelayed({
             stopForeground(true)
             stopSelf()
-        }, 2000) // 2 segundos para que pueda hablar
+        }, 4000) // 2 segundos para que pueda hablar
 
     }
 

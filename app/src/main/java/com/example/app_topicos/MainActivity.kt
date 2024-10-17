@@ -40,6 +40,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Inicializa dialog flow
+        initializeDialogflow()
+        // Verifica los permisos
+        checkAudioPermission()
         // Iniciar el servicio de sacudida
         val shakeServiceIntent = Intent(this, ShakeService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -57,11 +61,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
         }
 
-        // Verifica los permisos
-        checkAudioPermission()
+
 
         // Configura el botón
         val btnSpeak: Button = findViewById(R.id.btnSpeak)
+        btnSpeak.visibility = View.VISIBLE // Esto hace visible el botón
         btnSpeak.setOnTouchListener { _, event ->
             when (event.action) {
                 android.view.MotionEvent.ACTION_DOWN -> {
@@ -82,13 +86,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             // Cargar las credenciales desde api.json en res/raw
             val stream = resources.openRawResource(R.raw.api)
             val credentials = GoogleCredentials.fromStream(stream)
+
+            // Asegúrate de que las credenciales son del tipo ServiceAccountCredentials
+            val serviceAccountCredentials = credentials as? ServiceAccountCredentials
+                ?: throw IllegalArgumentException("Credenciales no son de tipo ServiceAccount")
+
+            // Obtener el projectId desde las credenciales
+            val projectId = serviceAccountCredentials.projectId
+
             val settings = SessionsSettings.newBuilder()
                 .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
                 .build()
 
             // Crear el cliente de sesión
             sessionsClient = SessionsClient.create(settings)
-            session = SessionName.of("tu-project-id", UUID.randomUUID().toString())
+            session = SessionName.of(projectId, uuid)
 
             Log.d("Dialogflow", "Inicialización exitosa")
         } catch (e: Exception) {
@@ -102,10 +114,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val textInput = TextInput.newBuilder().setText(text).setLanguageCode("es").build()
             val queryInput = QueryInput.newBuilder().setText(textInput).build()
 
-            val response = sessionsClient.detectIntent(session, queryInput)
-            val replyText = response.queryResult.fulfillmentText
+            // Enviar la consulta a Dialogflow
+            val request = DetectIntentRequest.newBuilder()
+                .setSession(session.toString())
+                .setQueryInput(queryInput)
+                .build()
 
-            Log.d("Dialogflow", "Respuesta: $replyText")
+            // Obtener la respuesta de Dialogflow
+            val response = sessionsClient.detectIntent(request)
+            val fulfillmentText = response.queryResult.fulfillmentText
+
+            Log.d("Dialogflow", "Respuesta: $fulfillmentText")
+            // Reproducir la respuesta con TextToSpeech
+            speak(fulfillmentText)
         } catch (e: Exception) {
             Log.e("Dialogflow", "Error al enviar mensaje: ${e.message}")
         }
@@ -125,7 +146,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
 
             override fun onError(error: Int) {
-                Log.e(TAG, "Error en SpeechRecognizer: $error")
+                when (error) {
+                    SpeechRecognizer.ERROR_NO_MATCH -> {
+                        Log.e(TAG, "No se reconoció ninguna coincidencia")
+                    }
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                        Log.e(TAG, "El reconocimiento de voz está ocupado")
+                    }
+                    SpeechRecognizer.ERROR_CLIENT -> {
+                        Log.e(TAG, "Error del cliente de reconocimiento de voz")
+                    }
+                    else -> {
+                        Log.e(TAG, "Error en SpeechRecognizer: $error")
+                    }
+                }
             }
 
             override fun onPartialResults(partialResults: Bundle?) {}
@@ -201,6 +235,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         })
 
     }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 1) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // El usuario otorgó el permiso, puedes proceder con el reconocimiento de voz
+                Toast.makeText(this, "Permiso de grabación concedido", Toast.LENGTH_SHORT).show()
+            } else {
+                // El usuario no otorgó el permiso, no puedes usar el reconocimiento de voz
+                Toast.makeText(this, "Permiso de grabación denegado", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
 
 //    private fun enviarMensaje(view: View) {
 //
