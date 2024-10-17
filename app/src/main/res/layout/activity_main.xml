@@ -7,6 +7,7 @@
     android:fitsSystemWindows="true"
     tools:context=".MainActivity">
 
+    <!-- AppBar con Toolbar -->
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -19,8 +20,10 @@
 
     </com.google.android.material.appbar.AppBarLayout>
 
+    <!-- Contenido Principal -->
     <include layout="@layout/content_main" />
 
+    <!-- Botón flotante existente -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab"
         android:layout_width="wrap_content"
@@ -29,5 +32,17 @@
         android:layout_marginEnd="@dimen/fab_margin"
         android:layout_marginBottom="16dp"
         app:srcCompat="@android:drawable/ic_dialog_email" />
+
+    <!-- Botón que cubre toda la pantalla para reconocimiento de voz -->
+    <Button
+        android:id="@+id/btnSpeak"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:text="Mantén presionado para hablar"
+        android:textSize="24sp"
+        android:background="@android:color/holo_blue_light"
+        android:textColor="@android:color/white"
+        android:gravity="center"
+        android:visibility="gone" /> <!-- Inicia oculto -->
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

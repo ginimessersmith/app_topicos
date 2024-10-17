@@ -14,20 +14,40 @@ import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
 import android.os.Vibrator
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlin.math.sqrt
+import android.speech.tts.TextToSpeech
+import java.util.*
 
-class ShakeService : Service(), SensorEventListener {
+class ShakeService : Service(), SensorEventListener,TextToSpeech.OnInitListener {
 
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
     private var shakeThreshold = 15f // Sensibilidad para la detección de sacudidas
     private var lastShakeTime: Long = 0
+    private lateinit var textToSpeech: TextToSpeech;
+    private val handler = Handler(Looper.getMainLooper())
+    private val timeoutRunnable = Runnable {
+        // Hablar el mensaje "Aplicación detenida"
+        speak("Aplicación detenida")
+
+        // Detener el servicio en primer plano después de que se pronuncie el mensaje
+        handler.postDelayed({
+            stopForeground(true)
+            stopSelf()
+        }, 2000) // 2 segundos para que pueda hablar
+
+    }
 
     override fun onCreate() {
         super.onCreate()
 
+        // Inicializamos el TextToSpeech
+        textToSpeech = TextToSpeech(this, this) // <-- Inicializar TextToSpeech
         // Inicializamos el sensor de acelerómetro
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -41,6 +61,8 @@ class ShakeService : Service(), SensorEventListener {
 
         // Iniciar el servicio en primer plano
         startForegroundService()
+        // Iniciar el temporizador de 1 minuto
+        handler.postDelayed(timeoutRunnable, 30_000) // 30 segundos en milisegundos
     }
 
     // Iniciar el servicio en primer plano con una notificación
@@ -60,7 +82,7 @@ class ShakeService : Service(), SensorEventListener {
 
         // Intent para abrir la actividad principal si se toca la notificación
         val notificationIntent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0)
+        val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
 
         // Crear la notificación
         val notification = NotificationCompat.Builder(this, notificationChannelId)
@@ -72,12 +94,20 @@ class ShakeService : Service(), SensorEventListener {
 
         // Iniciar el servicio en primer plano
         startForeground(1, notification)
+        handler.postDelayed(timeoutRunnable, 30_000) // 30 segundos en milisegundos
     }
 
     override fun onDestroy() {
         super.onDestroy()
         // Desregistramos el sensor cuando el servicio es destruido
         sensorManager.unregisterListener(this)
+        // Liberamos el TextToSpeech
+        if (textToSpeech.isSpeaking) { // <-- Detener y liberar TextToSpeech
+            textToSpeech.stop()
+        }
+        textToSpeech.shutdown()
+        // Eliminar cualquier Runnable pendiente
+        handler.removeCallbacks(timeoutRunnable)
         Log.d("ShakeService", "Servicio destruido y acelerómetro desregistrado")
     }
 
@@ -106,15 +136,21 @@ class ShakeService : Service(), SensorEventListener {
         // Vibración como feedback (opcional)
         val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         vibrator.vibrate(500) // Vibrar por 500 milisegundos
+        // Sintetizar la voz
+        speak("Hola") // <-- Llamar a la función speak para decir "Hola"
+        // Reiniciar el temporizador de 1 minuto
+        handler.removeCallbacks(timeoutRunnable)
+        handler.postDelayed(timeoutRunnable, 60_000) // 1 minuto
 
         // Intent para lanzar la actividad
         val launchIntent = Intent(this, MainActivity::class.java)
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         startActivity(launchIntent)
-
+        handler.postDelayed(timeoutRunnable, 30_000) // 30 segundos en milisegundos
 
         try {
             startActivity(launchIntent)
+            handler.postDelayed(timeoutRunnable, 30_000) // 30 segundos en milisegundos
         } catch (e: Exception) {
             Log.e("ShakeService", "Error al lanzar la actividad: ${e.message}")
         }
@@ -128,5 +164,25 @@ class ShakeService : Service(), SensorEventListener {
     override fun onBind(intent: Intent?): IBinder? {
         // No usamos este método ya que es un servicio sin conexión directa (no Bound Service)
         return null
+    }
+
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            // Configurar el idioma a español (puedes cambiar esto según el idioma)
+            val result = textToSpeech.setLanguage(Locale("es", "ES")) // <-- Configurar idioma
+
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.e("ShakeService", "El idioma no es compatible")
+            } else {
+                Log.d("ShakeService", "TextToSpeech inicializado correctamente")
+            }
+        } else {
+            Log.e("ShakeService", "Error al inicializar TextToSpeech")
+        }
+    }
+
+    private fun speak(text: String) {
+        textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null) // <-- Función para sintetizar la voz
     }
 }
